@@ -50,27 +50,29 @@ const App: React.FC = () => {
     setIsAiLoading(true);
     setAiInterpretation('');
 
-    if (!process.env.API_KEY) {
-        setAiInterpretation("خطا: کلید API برای Gemini تنظیم نشده است. لطفاً متغیر محیطی را در Vercel تنظیم کنید.");
+    if (!process.env.weather) {
+        setAiInterpretation("خطا: کلید API با نام 'weather' برای Gemini تنظیم نشده است. لطفاً این متغیر محیطی را در Vercel تنظیم کنید.");
         setIsAiLoading(false);
         return;
     }
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const now = new Date();
-        const currentHourIndex = data.hourly.time.findIndex(t => new Date(t) >= now) ?? 0;
+        const ai = new GoogleGenAI({ apiKey: process.env.weather });
 
         const prompt = `
-        شما یک دستیار هواشناسی خوش‌برخورد و خلاق هستید. بر اساس داده‌های آب و هوای زیر برای شهر "${data.timezone.split('/')[1]?.replace('_', ' ')}"، یک خلاصه‌ی مفید و خوانا در یک پاراگراف به زبان فارسی ارائه دهید.
+        شما یک دستیار هواشناسی خوش‌برخورد و خلاق هستید. بر اساس داده‌های آب و هوای زیر برای شهر "${data.timezone.split('/')[1]?.replace('_', ' ')}"، یک تحلیل جذاب به زبان فارسی ارائه دهید.
 
-        - دمای فعلی: ${Math.round(data.hourly.temperature_2m[currentHourIndex])}°C
-        - وضعیت فعلی: ${WMO_CODES[data.hourly.weather_code[currentHourIndex]]?.description}
-        - دمای احساسی: ${Math.round(data.hourly.apparent_temperature[currentHourIndex])}°C
-        - رطوبت: ${data.hourly.relative_humidity_2m[currentHourIndex]}%
-        - سرعت باد: ${data.hourly.wind_speed_10m[currentHourIndex]} km/h
+        تحلیل شما باید شامل دو بخش باشد:
+        1.  **خلاصه وضعیت:** یک پاراگراف خوانا و مفید درباره وضعیت فعلی و پیش‌بینی امروز.
+        2.  **پیشنهاد خلاقانه:** بعد از خلاصه، یک پیشنهاد سرگرم‌کننده یا یک نکته جالب مرتبط با این آب و هوا ارائه دهید. این بخش را با عنوان **"پیشنهاد خلاقانه:"** شروع کنید.
+
+        داده‌های آب و هوا:
+        - دمای فعلی: ${Math.round(data.current.temperature_2m)}°C
+        - وضعیت فعلی: ${WMO_CODES[data.current.weather_code]?.description}
+        - دمای احساسی: ${Math.round(data.current.apparent_temperature)}°C
+        - رطوبت: ${data.current.relative_humidity_2m}%
+        - سرعت باد: ${data.current.wind_speed_10m} km/h
         - پیش‌بینی امروز: حداکثر ${Math.round(data.daily.temperature_2m_max[0])}°C، حداقل ${Math.round(data.daily.temperature_2m_min[0])}°C
-        - خلاصه‌ی هفته: در طول هفته دما متغیر خواهد بود و وضعیت‌های جوی مختلفی را تجربه خواهیم کرد.
         `;
         
         const response = await ai.models.generateContent({
@@ -95,7 +97,7 @@ const App: React.FC = () => {
     setAiInterpretation('');
 
     try {
-      const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`);
+      const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.reason || 'Failed to fetch weather data');
@@ -142,9 +144,7 @@ const App: React.FC = () => {
     e.preventDefault();
     fetchWeatherData(latitude, longitude);
   };
-  
-  const currentHourDataIndex = weatherData ? weatherData.hourly.time.findIndex(t => new Date(t) >= new Date()) ?? 0 : 0;
-  
+    
   return (
     <div className="bg-gray-800 min-h-screen text-white p-4 sm:p-6 lg:p-8 font-sans">
       <div className="max-w-4xl mx-auto">
@@ -183,14 +183,14 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-semibold mb-4 text-gray-300">Current Weather in {weatherData.timezone.split('/')[1]?.replace('_', ' ')}</h2>
                 <div className="flex flex-col sm:flex-row justify-between items-center">
                     <div className="text-center sm:text-left">
-                        <p className="text-6xl font-extrabold">{Math.round(weatherData.hourly.temperature_2m[currentHourDataIndex])}{weatherData.hourly_units.temperature_2m}</p>
-                        <p className="text-xl text-gray-400">{WMO_CODES[weatherData.hourly.weather_code[currentHourDataIndex]]?.description}</p>
+                        <p className="text-6xl font-extrabold">{Math.round(weatherData.current.temperature_2m)}{weatherData.current_units.temperature_2m}</p>
+                        <p className="text-xl text-gray-400">{WMO_CODES[weatherData.current.weather_code]?.description}</p>
                     </div>
-                    <div className="text-7xl my-4 sm:my-0">{WMO_CODES[weatherData.hourly.weather_code[currentHourDataIndex]]?.icon}</div>
+                    <div className="text-7xl my-4 sm:my-0">{WMO_CODES[weatherData.current.weather_code]?.icon}</div>
                     <div className="text-sm text-gray-400 space-y-2 text-center sm:text-right">
-                        <p>Feels like: {Math.round(weatherData.hourly.apparent_temperature[currentHourDataIndex])}°</p>
-                        <p>Humidity: {weatherData.hourly.relative_humidity_2m[currentHourDataIndex]}%</p>
-                        <p>Wind: {weatherData.hourly.wind_speed_10m[currentHourDataIndex]} km/h</p>
+                        <p>Feels like: {Math.round(weatherData.current.apparent_temperature)}°</p>
+                        <p>Humidity: {weatherData.current.relative_humidity_2m}%</p>
+                        <p>Wind: {weatherData.current.wind_speed_10m} km/h</p>
                     </div>
                 </div>
               </div>
@@ -239,7 +239,7 @@ const App: React.FC = () => {
                      <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
                   </div>
                 ) : (
-                  <p className="text-gray-300 leading-relaxed text-right" dir="rtl">
+                  <p className="text-gray-300 leading-relaxed text-right whitespace-pre-line" dir="rtl">
                     {aiInterpretation}
                   </p>
                 )}
