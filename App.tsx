@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import type { WeatherData, ProcessedHourly, ProcessedDaily } from './types';
@@ -50,14 +51,8 @@ const App: React.FC = () => {
     setIsAiLoading(true);
     setAiInterpretation('');
 
-    if (!process.env.weather) {
-        setAiInterpretation("خطا: کلید API با نام 'weather' برای Gemini تنظیم نشده است. لطفاً این متغیر محیطی را در Vercel تنظیم کنید.");
-        setIsAiLoading(false);
-        return;
-    }
-
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.weather });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
         const prompt = `
         شما یک دستیار هواشناسی خوش‌برخورد و خلاق هستید. بر اساس داده‌های آب و هوای زیر برای شهر "${data.timezone.split('/')[1]?.replace('_', ' ')}"، یک تحلیل جذاب به زبان فارسی ارائه دهید.
@@ -84,7 +79,11 @@ const App: React.FC = () => {
 
     } catch (err) {
         console.error("Error generating AI interpretation:", err);
-        setAiInterpretation("متاسفانه در دریافت تحلیل هوش مصنوعی خطایی رخ داد.");
+        let errorMessage = "متاسفانه در دریافت تحلیل هوش مصنوعی خطایی رخ داد.";
+        if (err instanceof Error && err.message.toLowerCase().includes('api key')) {
+          errorMessage = "خطا: کلید API برای Gemini تنظیم نشده یا نامعتبر است. لطفاً متغیر محیطی API_KEY را بررسی کنید.";
+        }
+        setAiInterpretation(errorMessage);
     } finally {
         setIsAiLoading(false);
     }
@@ -160,6 +159,7 @@ const App: React.FC = () => {
             onChange={(e) => setLatitude(e.target.value)}
             placeholder="Latitude (e.g., 52.52)"
             className="flex-1 bg-gray-800 p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            aria-label="Latitude"
           />
           <input
             type="text"
@@ -167,6 +167,7 @@ const App: React.FC = () => {
             onChange={(e) => setLongitude(e.target.value)}
             placeholder="Longitude (e.g., 13.41)"
             className="flex-1 bg-gray-800 p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            aria-label="Longitude"
           />
           <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-md transition-colors duration-300">
             Get Forecast
@@ -179,71 +180,72 @@ const App: React.FC = () => {
           {weatherData && !loading && !error && (
             <div className="space-y-8">
               {/* Current Weather */}
-              <div className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
-                <h2 className="text-2xl font-semibold mb-4 text-gray-300">Current Weather in {weatherData.timezone.split('/')[1]?.replace('_', ' ')}</h2>
+              <section aria-labelledby="current-weather-heading" className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
+                <h2 id="current-weather-heading" className="text-2xl font-semibold mb-4 text-gray-300">Current Weather in {weatherData.timezone.split('/')[1]?.replace('_', ' ')}</h2>
                 <div className="flex flex-col sm:flex-row justify-between items-center">
                     <div className="text-center sm:text-left">
                         <p className="text-6xl font-extrabold">{Math.round(weatherData.current.temperature_2m)}{weatherData.current_units.temperature_2m}</p>
                         <p className="text-xl text-gray-400">{WMO_CODES[weatherData.current.weather_code]?.description}</p>
                     </div>
-                    <div className="text-7xl my-4 sm:my-0">{WMO_CODES[weatherData.current.weather_code]?.icon}</div>
+                    <div className="text-7xl my-4 sm:my-0" role="img" aria-label={WMO_CODES[weatherData.current.weather_code]?.description}>{WMO_CODES[weatherData.current.weather_code]?.icon}</div>
                     <div className="text-sm text-gray-400 space-y-2 text-center sm:text-right">
                         <p>Feels like: {Math.round(weatherData.current.apparent_temperature)}°</p>
                         <p>Humidity: {weatherData.current.relative_humidity_2m}%</p>
                         <p>Wind: {weatherData.current.wind_speed_10m} km/h</p>
                     </div>
                 </div>
-              </div>
+              </section>
 
               {/* Hourly Forecast */}
-              <div className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
-                <h2 className="text-2xl font-semibold mb-4 text-gray-300">Hourly Forecast</h2>
+              <section aria-labelledby="hourly-forecast-heading" className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
+                <h2 id="hourly-forecast-heading" className="text-2xl font-semibold mb-4 text-gray-300">Hourly Forecast</h2>
                 <div className="flex overflow-x-auto space-x-4 pb-4">
                   {processedHourly.map((hour, i) => (
                     <div key={i} className="flex-shrink-0 text-center bg-gray-800/60 p-4 rounded-lg w-24">
                       <p className="font-medium">{new Date(hour.time).toLocaleTimeString('en-US', { hour: 'numeric', hour12: true })}</p>
-                      <p className="text-3xl my-2">{WMO_CODES[hour.weather_code]?.icon}</p>
+                      <p className="text-3xl my-2" role="img" aria-label={WMO_CODES[hour.weather_code]?.description}>{WMO_CODES[hour.weather_code]?.icon}</p>
                       <p className="font-bold text-lg">{Math.round(hour.temperature_2m)}°</p>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
               
               {/* 7-Day Forecast */}
-              <div className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
-                <h2 className="text-2xl font-semibold mb-4 text-gray-300">7-Day Forecast</h2>
+              <section aria-labelledby="daily-forecast-heading" className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
+                <h2 id="daily-forecast-heading" className="text-2xl font-semibold mb-4 text-gray-300">7-Day Forecast</h2>
                 <div className="space-y-2">
                   {processedDaily.map((day, i) => (
                     <div key={i} className="flex items-center justify-between p-3 bg-gray-800/60 rounded-lg">
                       <p className="font-semibold w-1/4">{new Date(day.time).toLocaleDateString('en-US', { weekday: 'long' })}</p>
                       <div className="flex items-center gap-3 w-1/4 justify-center">
-                        <span className="text-3xl">{WMO_CODES[day.weather_code]?.icon}</span>
+                        <span className="text-3xl" role="img" aria-label={WMO_CODES[day.weather_code]?.description}>{WMO_CODES[day.weather_code]?.icon}</span>
                       </div>
                        <p className="text-gray-400 w-1/4 text-right">L: {Math.round(day.temperature_2m_min)}°</p>
                        <p className="font-semibold w-1/4 text-right">H: {Math.round(day.temperature_2m_max)}°</p>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
                 
               {/* AI Interpretation */}
-               <div className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
-                <h2 className="text-2xl font-semibold mb-4 text-cyan-300 flex items-center gap-3" dir="rtl">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+               <section aria-labelledby="ai-interpretation-heading" className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
+                <h2 id="ai-interpretation-heading" className="text-2xl font-semibold mb-4 text-cyan-300 flex items-center gap-3" dir="rtl">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M12 21v-1m0-16a7 7 0 110 14 7 7 0 010-14z" />
                     </svg>
                     تحلیل هوش مصنوعی
                 </h2>
                 {isAiLoading ? (
-                  <div className="flex justify-center items-center py-4">
+                  <div className="flex justify-center items-center py-4" aria-live="polite" aria-busy="true">
                      <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                     <span className="sr-only">Loading AI interpretation</span>
                   </div>
                 ) : (
                   <p className="text-gray-300 leading-relaxed text-right whitespace-pre-line" dir="rtl">
                     {aiInterpretation}
                   </p>
                 )}
-              </div>
+              </section>
 
             </div>
           )}
