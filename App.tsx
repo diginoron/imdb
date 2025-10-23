@@ -62,11 +62,15 @@ const App: React.FC = () => {
       return weatherDataResult;
     } catch (err) {
       console.error("Weather Fetch Error:", err);
+      let errorMessage = 'یک خطای ناشناخته در دریافت اطلاعات آب و هوا رخ داده است.';
       if (err instanceof Error) {
-        setError(`خطا در دریافت اطلاعات آب و هوا: ${err.message}`);
-      } else {
-        setError('یک خطای ناشناخته در دریافت اطلاعات آب و هوا رخ داده است.');
+        if (err.message === 'Failed to fetch') {
+          errorMessage = 'خطا در برقراری ارتباط با سرور آب و هوا. لطفاً اتصال اینترنت خود را بررسی کرده و مطمئن شوید که درخواست توسط مرورگر یا شبکه مسدود نشده باشد.';
+        } else {
+          errorMessage = `خطا در دریافت اطلاعات آب و هوا: ${err.message}`;
+        }
       }
+      setError(errorMessage);
       return null;
     } finally {
       setLoading(false);
@@ -74,13 +78,21 @@ const App: React.FC = () => {
   }, []);
 
   const fetchAiInterpretation = useCallback(async (weatherDataResult: WeatherData) => {
+    // This key is expected to be set in the environment, but won't be available in the browser on platforms like Vercel.
+    const apiKey = process.env.API_KEY;
+
+    if (!apiKey) {
+      setAiInterpretation(
+        "کلید API یافت نشد. توجه: این برنامه در مرورگر اجرا می‌شود و به دلایل امنیتی، به متغیرهای محیطی سمت سرور (مانند Vercel) دسترسی ندارد. برای استقرار این برنامه، باید یک بخش پشتیبان (مانند Serverless Function) ایجاد کنید تا کلید API را به صورت امن مدیریت کند."
+      );
+      setIsAiLoading(false);
+      return;
+    }
+      
     setIsAiLoading(true);
     setAiInterpretation("");
     try {
-      // The explicit check for the API key has been removed.
-      // We now rely on the GenAI SDK to handle the case where process.env.API_KEY is undefined,
-      // which will provide a more direct and transparent error message to the developer.
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       const prompt = `
           بر اساس داده‌های آب و هوای زیر برای شهر "${weatherDataResult.timezone.split("/")[1]?.replace("_", " ")}"، یک تحلیل جذاب به زبان فارسی ارائه دهید.
           داده‌های آب و هوا:
@@ -118,7 +130,7 @@ const App: React.FC = () => {
       try {
           aiJsonResponse = JSON.parse(responseText);
       } catch (parseError) {
-          const match = responseText.match(/` + "```" + `json\n([\\s\\S]*?)\n` + "```" + `/);
+          const match = responseText.match(/` + "```" + `json\n([\s\S]*?)\n` + "```" + `/);
           if (match && match[1]) {
             aiJsonResponse = JSON.parse(match[1]);
           } else {
@@ -136,7 +148,7 @@ const App: React.FC = () => {
     } catch (aiError) {
       console.error("AI Interpretation Error:", aiError);
       if (aiError instanceof Error) {
-        setAiInterpretation(`تحلیل هوش مصنوعی با خطا مواجه شد. لطفاً کنسول مرورگر را برای جزئیات فنی بررسی کنید. پیام خطا: ${aiError.message}`);
+        setAiInterpretation(`تحلیل هوش مصنوعی با خطا مواجه شد. پیام خطا: ${aiError.message}`);
       } else {
         setAiInterpretation("متاسفانه تحلیل هوش مصنوعی در حال حاضر در دسترس نیست. یک خطای ناشناخته رخ داده است.");
       }
