@@ -52,6 +52,8 @@ const App: React.FC = () => {
     setAiInterpretation('');
 
     try {
+        // The application uses the API_KEY environment variable.
+        // Ensure your key (e.g., the one you named DATALEARN) is configured in the API_KEY environment variable.
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
         const prompt = `
