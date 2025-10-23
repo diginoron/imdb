@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { GoogleGenAI } from "@google/genai";
+// import { GoogleGenAI } from "@google/genai"; // دیگر نیازی نیست - This is no longer needed
 import type { WeatherData, ProcessedHourly, ProcessedDaily } from './types';
 import { WMO_CODES } from './wmoCodes';
 import Loader from './components/Loader';
@@ -26,7 +27,7 @@ const App: React.FC = () => {
     setIsAiLoading(true);
     setAiInterpretation('');
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // این همان پرامپت قبلی شماست
       const prompt = `
         شما یک دستیار هواشناسی خوش‌برخورد و خلاق هستید. بر اساس داده‌های آب و هوای زیر برای شهر "${data.timezone.split('/')[1]?.replace('_', ' ')}"، یک تحلیل جذاب به زبان فارسی ارائه دهید.
         تحلیل شما باید شامل دو بخش باشد:
@@ -40,16 +41,33 @@ const App: React.FC = () => {
         - سرعت باد: ${data.current.wind_speed_10m} km/h
         - پیش‌بینی امروز: حداکثر ${Math.round(data.daily.temperature_2m_max[0])}°C، حداقل ${Math.round(data.daily.temperature_2m_min[0])}°C
         `;
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
+
+      // به جای فراخوانی مستقیم Gemini، به API Route خودمان درخواست می‌فرستیم
+      const apiResponse = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt }),
       });
-      setAiInterpretation(response.text);
+
+      if (!apiResponse.ok) {
+        const errorData = await apiResponse.json();
+        // تلاش برای ارائه خطای واضح‌تر
+        if (errorData.details && errorData.details.toLowerCase().includes('api key')) {
+            throw new Error("خطا: کلید API برای Gemini تنظیم نشده یا نامعتبر است. لطفاً متغیر محیطی API_KEY را در تنظیمات Vercel بررسی کنید.");
+        }
+        throw new Error(errorData.error || 'Failed to fetch AI interpretation from server');
+      }
+
+      const result = await apiResponse.json();
+      setAiInterpretation(result.text);
+
     } catch (err) {
       console.error("Error generating AI interpretation:", err);
       let errorMessage = "متاسفانه در دریافت تحلیل هوش مصنوعی خطایی رخ داد.";
-      if (err instanceof Error && err.message.toLowerCase().includes('api key')) {
-        errorMessage = "خطا: کلید API برای Gemini تنظیم نشده یا نامعتبر است. لطفاً متغیر محیطی API_KEY را بررسی کنید.";
+      if (err instanceof Error) {
+        errorMessage = err.message;
       }
       setAiInterpretation(errorMessage);
     } finally {
