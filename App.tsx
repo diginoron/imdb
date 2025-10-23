@@ -78,21 +78,11 @@ const App: React.FC = () => {
   }, []);
 
   const fetchAiInterpretation = useCallback(async (weatherDataResult: WeatherData) => {
-    // This key is expected to be set in the environment, but won't be available in the browser on platforms like Vercel.
-    const apiKey = process.env.API_KEY;
-
-    if (!apiKey) {
-      setAiInterpretation(
-        "کلید API یافت نشد. توجه: این برنامه در مرورگر اجرا می‌شود و به دلایل امنیتی، به متغیرهای محیطی سمت سرور (مانند Vercel) دسترسی ندارد. برای استقرار این برنامه، باید یک بخش پشتیبان (مانند Serverless Function) ایجاد کنید تا کلید API را به صورت امن مدیریت کند."
-      );
-      setIsAiLoading(false);
-      return;
-    }
-      
     setIsAiLoading(true);
     setAiInterpretation("");
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      // The SDK will throw an error if the API key is not available in the environment.
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `
           بر اساس داده‌های آب و هوای زیر برای شهر "${weatherDataResult.timezone.split("/")[1]?.replace("_", " ")}"، یک تحلیل جذاب به زبان فارسی ارائه دهید.
           داده‌های آب و هوا:
@@ -148,7 +138,7 @@ const App: React.FC = () => {
     } catch (aiError) {
       console.error("AI Interpretation Error:", aiError);
       if (aiError instanceof Error) {
-        setAiInterpretation(`تحلیل هوش مصنوعی با خطا مواجه شد. پیام خطا: ${aiError.message}`);
+        setAiInterpretation(`تحلیل هوش مصنوعی با خطا مواجه شد. لطفاً کنسول مرورگر را برای جزئیات فنی بررسی کنید. پیام خطا: ${aiError.message}`);
       } else {
         setAiInterpretation("متاسفانه تحلیل هوش مصنوعی در حال حاضر در دسترس نیست. یک خطای ناشناخته رخ داده است.");
       }
