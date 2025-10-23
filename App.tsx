@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import type { WeatherData, ProcessedHourly, ProcessedDaily } from './types';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -80,7 +79,7 @@ const App: React.FC = () => {
     try {
       const apiKey = process.env.API_KEY;
       if (!apiKey) {
-        setAiInterpretation("کلید API هوش مصنوعی یافت نشد. برای فعال‌سازی این قابلیت، لطفاً متغیر محیطی `API_KEY` را در تنظیمات پلتفرم استقرار خود (مانند Vercel) اضافه کنید.");
+        setAiInterpretation("خطا در دسترسی به کلید API: کلید در کد سمت کاربر یافت نشد. توجه داشته باشید که متغیرهای محیطی Vercel (مانند API_KEY) به دلایل امنیتی مستقیماً در مرورگر قابل دسترسی نیستند. این برنامه برای کارکرد صحیح در Vercel نیاز به یک بخش پشتیبان (مانند Serverless Function) برای مدیریت کلید API دارد.");
         return;
       }
       const ai = new GoogleGenAI({ apiKey });
@@ -121,7 +120,7 @@ const App: React.FC = () => {
       try {
           aiJsonResponse = JSON.parse(responseText);
       } catch (parseError) {
-          const match = responseText.match(/```json\n([\s\S]*?)\n```/);
+          const match = responseText.match(/` + "```" + `json\n([\\s\\S]*?)\n` + "```" + `/);
           if (match && match[1]) {
             aiJsonResponse = JSON.parse(match[1]);
           } else {
