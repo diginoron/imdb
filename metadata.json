@@ -1,5 +1,5 @@
 {
-  "name": "IMDb Movie Details Fetcher",
-  "description": "An application to fetch and display detailed information about a movie from IMDb using its ID. The user enters an IMDb ID (e.g., tt0816692), and the app retrieves and shows the movie's poster, title, year, rating, plot, and cast.",
+  "name": "Weather Forecast App",
+  "description": "A clean and modern weather forecast application that provides hourly and daily weather data for any location using latitude and longitude.",
   "requestFramePermissions": []
 }

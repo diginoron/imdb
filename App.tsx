@@ -1,147 +1,182 @@
-import React, { useState, useCallback } from 'react';
-import type { MovieDetails } from './types';
-import MovieCard from './components/MovieCard';
+import React, { useState, useEffect, useCallback } from 'react';
+import type { WeatherData, ProcessedHourly, ProcessedDaily } from './types';
 import Loader from './components/Loader';
 import ErrorMessage from './components/ErrorMessage';
 
+const WMO_CODES: { [key: number]: { description: string; icon: string; } } = {
+  0: { description: 'Clear sky', icon: '☀️' },
+  1: { description: 'Mainly clear', icon: '🌤️' },
+  2: { description: 'Partly cloudy', icon: '⛅️' },
+  3: { description: 'Overcast', icon: '☁️' },
+  45: { description: 'Fog', icon: '🌫️' },
+  48: { description: 'Depositing rime fog', icon: '🌫️' },
+  51: { description: 'Light drizzle', icon: '🌦️' },
+  53: { description: 'Moderate drizzle', icon: '🌦️' },
+  55: { description: 'Dense drizzle', icon: '🌧️' },
+  56: { description: 'Light freezing drizzle', icon: '🌨️' },
+  57: { description: 'Dense freezing drizzle', icon: '🌨️' },
+  61: { description: 'Slight rain', icon: '🌦️' },
+  63: { description: 'Moderate rain', icon: '🌧️' },
+  65: { description: 'Heavy rain', icon: '🌧️' },
+  66: { description: 'Light freezing rain', icon: '🌨️' },
+  67: { description: 'Heavy freezing rain', icon: '🌨️' },
+  71: { description: 'Slight snow fall', icon: '🌨️' },
+  73: { description: 'Moderate snow fall', icon: '❄️' },
+  75: { description: 'Heavy snow fall', icon: '❄️' },
+  77: { description: 'Snow grains', icon: '🌨️' },
+  80: { description: 'Slight rain showers', icon: '🌦️' },
+  81: { description: 'Moderate rain showers', icon: '🌧️' },
+  82: { description: 'Violent rain showers', icon: '🌧️' },
+  85: { description: 'Slight snow showers', icon: '🌨️' },
+  86: { description: 'Heavy snow showers', icon: '❄️' },
+  95: { description: 'Thunderstorm', icon: '⛈️' },
+  96: { description: 'Thunderstorm with slight hail', icon: '⛈️' },
+  99: { description: 'Thunderstorm with heavy hail', icon: '⛈️' },
+};
+
 const App: React.FC = () => {
-  const [imdbId, setImdbId] = useState<string>('');
-  const [movieData, setMovieData] = useState<MovieDetails | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [latitude, setLatitude] = useState<string>('52.52');
+  const [longitude, setLongitude] = useState<string>('13.41');
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [processedHourly, setProcessedHourly] = useState<ProcessedHourly[]>([]);
+  const [processedDaily, setProcessedDaily] = useState<ProcessedDaily[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFetchMovie = useCallback(async (idToFetch: string) => {
-    if (!idToFetch.trim()) {
-      setError('لطفاً کد IMDb را وارد کنید.');
-      return;
-    }
-    if (!idToFetch.startsWith('tt')) {
-      setError('کد IMDb نامعتبر است. باید با "tt" شروع شود.');
-      return;
-    }
-
-    setIsLoading(true);
+  const fetchWeatherData = useCallback(async (lat: string, lon: string) => {
+    setLoading(true);
     setError(null);
-    setMovieData(null);
-
     try {
-       const resultText = await new Promise<string>((resolve, reject) => {
-        const data = null;
-        const xhr = new XMLHttpRequest();
-        xhr.withCredentials = true;
+      const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.reason || 'Failed to fetch weather data');
+      }
+      const data: WeatherData = await response.json();
+      setWeatherData(data);
 
-        xhr.addEventListener('readystatechange', function () {
-          if (this.readyState === this.DONE) {
-            if (this.status >= 200 && this.status < 400) {
-                resolve(this.responseText);
-            } else {
-                let errorMessage = `خطای سرور: ${this.status}`;
-                try {
-                    const errorJson = JSON.parse(this.responseText);
-                    errorMessage = errorJson.message || errorMessage;
-                } catch (e) {
-                    // Ignore parsing error
-                }
-                reject(new Error(errorMessage));
-            }
-          }
-        });
-        
-        xhr.onerror = () => {
-            reject(new Error('خطای شبکه. لطفاً اتصال اینترنت خود را بررسی کنید.'));
-        };
-
-        // Reverted to the correct endpoint /api/imdb/ which was proven to work.
-        xhr.open('GET', `https://imdb236.p.rapidapi.com/api/imdb/${idToFetch.trim()}`);
-        xhr.setRequestHeader('x-rapidapi-key', '04dafa2b45msh0225343c0fcf8c3p1146e8jsn9a70ae94558b');
-        xhr.setRequestHeader('x-rapidapi-host', 'imdb236.p.rapidapi.com');
-
-        xhr.send(data);
-      });
+      const now = new Date();
+      const currentHourIndex = data.hourly.time.findIndex(t => new Date(t) > now);
       
-      const responseJson = JSON.parse(resultText);
-      let movieDetails: MovieDetails | null = null;
+      const hourly = data.hourly.time.slice(currentHourIndex, currentHourIndex + 24).map((time, i) => ({
+          time,
+          temperature_2m: data.hourly.temperature_2m[currentHourIndex + i],
+          weather_code: data.hourly.weather_code[currentHourIndex + i],
+      }));
+      setProcessedHourly(hourly);
 
-      // Check for a nested success response: { status: true, data: { ... } }
-      if (responseJson.status === true && responseJson.data && typeof responseJson.data === 'object') {
-          movieDetails = responseJson.data;
-      } 
-      // Check for a direct movie object response: { title: '...', ... }
-      else if (responseJson.title) {
-          movieDetails = responseJson;
-      }
-      // Check for an array response with one movie object inside
-      else if (Array.isArray(responseJson) && responseJson.length > 0 && responseJson[0].title) {
-        movieDetails = responseJson[0];
-      }
+      const daily = data.daily.time.map((time, i) => ({
+          time,
+          weather_code: data.daily.weather_code[i],
+          temperature_2m_max: data.daily.temperature_2m_max[i],
+          temperature_2m_min: data.daily.temperature_2m_min[i],
+      }));
+      setProcessedDaily(daily);
 
-      // After checking, validate and set data, or throw an error.
-      if (movieDetails && movieDetails.title) {
-          setMovieData(movieDetails);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(`Error fetching data: ${err.message}`);
       } else {
-          // If no valid movie data structure was found, it's an error.
-          // Use the API's message if available, otherwise a generic error.
-          throw new Error(responseJson.message || 'فیلمی با این کد پیدا نشد.');
+        setError('An unknown error occurred.');
       }
-
-    } catch (err: any) {
-      setError(err.message || 'یک خطای ناشناخته رخ داد.');
-      console.error(err);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   }, []);
+  
+  useEffect(() => {
+    fetchWeatherData(latitude, longitude);
+  }, [fetchWeatherData]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    handleFetchMovie(imdbId);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchWeatherData(latitude, longitude);
   };
-
+  
+  const currentHourData = weatherData && processedHourly.length > 0 ? weatherData.hourly.time.findIndex(t => t === processedHourly[0].time) : 0;
+  
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-slate-800 text-white p-4 sm:p-6 lg:p-8">
+    <div className="bg-gray-800 min-h-screen text-white p-4 sm:p-6 lg:p-8 font-sans">
       <div className="max-w-4xl mx-auto">
         <header className="text-center mb-8">
-          <h1 className="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-2">
-            IMDb Movie Fetcher
-          </h1>
-          <p className="text-lg text-gray-400">
-            اطلاعات فیلم مورد نظر خود را فوراً دریافت کنید
-          </p>
+          <h1 className="text-4xl sm:text-5xl font-bold text-cyan-300 tracking-tight">Weather Forecast</h1>
+          <p className="mt-2 text-lg text-gray-400">Get the latest weather updates for any location.</p>
         </header>
 
-        <main>
-          <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 mb-8">
-            <input
-              type="text"
-              value={imdbId}
-              onChange={(e) => setImdbId(e.target.value)}
-              placeholder="کد IMDb را وارد کنید (مثلا: tt0816692)"
-              className="flex-grow bg-gray-800 border-2 border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition duration-300"
-            />
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="bg-yellow-500 text-gray-900 font-bold py-3 px-6 rounded-lg hover:bg-yellow-400 transition duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center"
-            >
-              {isLoading ? (
-                 <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : 'جستجو'}
-            </button>
-          </form>
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 mb-8 bg-gray-700/50 p-4 rounded-lg">
+          <input
+            type="text"
+            value={latitude}
+            onChange={(e) => setLatitude(e.target.value)}
+            placeholder="Latitude (e.g., 52.52)"
+            className="flex-1 bg-gray-800 p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+          />
+          <input
+            type="text"
+            value={longitude}
+            onChange={(e) => setLongitude(e.target.value)}
+            placeholder="Longitude (e.g., 13.41)"
+            className="flex-1 bg-gray-800 p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+          />
+          <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-md transition-colors duration-300">
+            Get Forecast
+          </button>
+        </form>
 
-          <div className="mt-6">
-            {isLoading && <Loader />}
-            {error && <ErrorMessage message={error} />}
-            {movieData && <MovieCard movie={movieData} />}
-            {!isLoading && !error && !movieData && (
-              <div className="text-center text-gray-500 bg-gray-800/50 p-8 rounded-lg">
-                <p>برای شروع، کد فیلم مورد نظر خود را وارد کرده و دکمه جستجو را بزنید.</p>
+        <main>
+          {loading && <Loader />}
+          {error && <ErrorMessage message={error} />}
+          {weatherData && !loading && !error && (
+            <div className="space-y-8">
+              {/* Current Weather */}
+              <div className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
+                <h2 className="text-2xl font-semibold mb-4 text-gray-300">Current Weather in {weatherData.timezone.split('/')[1]?.replace('_', ' ')}</h2>
+                <div className="flex flex-col sm:flex-row justify-between items-center">
+                    <div className="text-center sm:text-left">
+                        <p className="text-6xl font-extrabold">{Math.round(weatherData.hourly.temperature_2m[currentHourData])}{weatherData.hourly_units.temperature_2m}</p>
+                        <p className="text-xl text-gray-400">{WMO_CODES[weatherData.hourly.weather_code[currentHourData]]?.description}</p>
+                    </div>
+                    <div className="text-7xl my-4 sm:my-0">{WMO_CODES[weatherData.hourly.weather_code[currentHourData]]?.icon}</div>
+                    <div className="text-sm text-gray-400 space-y-2 text-center sm:text-right">
+                        <p>Feels like: {Math.round(weatherData.hourly.apparent_temperature[currentHourData])}°</p>
+                        <p>Humidity: {weatherData.hourly.relative_humidity_2m[currentHourData]}%</p>
+                        <p>Wind: {weatherData.hourly.wind_speed_10m[currentHourData]} km/h</p>
+                    </div>
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Hourly Forecast */}
+              <div className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
+                <h2 className="text-2xl font-semibold mb-4 text-gray-300">Hourly Forecast</h2>
+                <div className="flex overflow-x-auto space-x-4 pb-4">
+                  {processedHourly.map((hour, i) => (
+                    <div key={i} className="flex-shrink-0 text-center bg-gray-800/60 p-4 rounded-lg w-24">
+                      <p className="font-medium">{new Date(hour.time).toLocaleTimeString('en-US', { hour: 'numeric', hour12: true })}</p>
+                      <p className="text-3xl my-2">{WMO_CODES[hour.weather_code]?.icon}</p>
+                      <p className="font-bold text-lg">{Math.round(hour.temperature_2m)}°</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* 7-Day Forecast */}
+              <div className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
+                <h2 className="text-2xl font-semibold mb-4 text-gray-300">7-Day Forecast</h2>
+                <div className="space-y-2">
+                  {processedDaily.map((day, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-gray-800/60 rounded-lg">
+                      <p className="font-semibold w-1/4">{new Date(day.time).toLocaleDateString('en-US', { weekday: 'long' })}</p>
+                      <div className="flex items-center gap-3 w-1/4 justify-center">
+                        <span className="text-3xl">{WMO_CODES[day.weather_code]?.icon}</span>
+                      </div>
+                       <p className="text-gray-400 w-1/4 text-right">L: {Math.round(day.temperature_2m_min)}°</p>
+                       <p className="font-semibold w-1/4 text-right">H: {Math.round(day.temperature_2m_max)}°</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
