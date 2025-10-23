@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { GoogleGenAI } from "@google/genai";
 import type { WeatherData, ProcessedHourly, ProcessedDaily } from './types';
 import Loader from './components/Loader';
 import ErrorMessage from './components/ErrorMessage';
+
+// Initialize the Gemini AI model
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const WMO_CODES: { [key: number]: { description: string; icon: string; } } = {
   0: { description: 'Clear sky', icon: '☀️' },
@@ -42,10 +46,49 @@ const App: React.FC = () => {
   const [processedDaily, setProcessedDaily] = useState<ProcessedDaily[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiInterpretation, setAiInterpretation] = useState<string>('');
+  const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
+
+  const getAiInterpretation = useCallback(async (data: WeatherData) => {
+    setIsAiLoading(true);
+    setAiInterpretation('');
+    try {
+        const now = new Date();
+        const currentHourIndex = data.hourly.time.findIndex(t => new Date(t) >= now) ?? 0;
+
+        const prompt = `
+        شما یک دستیار هواشناسی خوش‌برخورد و خلاق هستید. بر اساس داده‌های آب و هوای زیر برای شهر "${data.timezone.split('/')[1]?.replace('_', ' ')}"، یک خلاصه‌ی مفید و خوانا در یک پاراگراف به زبان فارسی ارائه دهید.
+
+        - دمای فعلی: ${Math.round(data.hourly.temperature_2m[currentHourIndex])}°C
+        - وضعیت فعلی: ${WMO_CODES[data.hourly.weather_code[currentHourIndex]]?.description}
+        - دمای احساسی: ${Math.round(data.hourly.apparent_temperature[currentHourIndex])}°C
+        - رطوبت: ${data.hourly.relative_humidity_2m[currentHourIndex]}%
+        - سرعت باد: ${data.hourly.wind_speed_10m[currentHourIndex]} km/h
+        - پیش‌بینی امروز: حداکثر ${Math.round(data.daily.temperature_2m_max[0])}°C، حداقل ${Math.round(data.daily.temperature_2m_min[0])}°C
+        - خلاصه‌ی هفته: در طول هفته دما متغیر خواهد بود و وضعیت‌های جوی مختلفی را تجربه خواهیم کرد.
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        
+        setAiInterpretation(response.text);
+
+    } catch (err) {
+        console.error("Error generating AI interpretation:", err);
+        setAiInterpretation("متاسفانه در دریافت تحلیل هوش مصنوعی خطایی رخ داد.");
+    } finally {
+        setIsAiLoading(false);
+    }
+  }, []);
 
   const fetchWeatherData = useCallback(async (lat: string, lon: string) => {
     setLoading(true);
     setError(null);
+    setWeatherData(null);
+    setAiInterpretation('');
+
     try {
       const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`);
       if (!response.ok) {
@@ -56,7 +99,7 @@ const App: React.FC = () => {
       setWeatherData(data);
 
       const now = new Date();
-      const currentHourIndex = data.hourly.time.findIndex(t => new Date(t) > now);
+      const currentHourIndex = data.hourly.time.findIndex(t => new Date(t) >= now) ?? 0;
       
       const hourly = data.hourly.time.slice(currentHourIndex, currentHourIndex + 24).map((time, i) => ({
           time,
@@ -73,6 +116,8 @@ const App: React.FC = () => {
       }));
       setProcessedDaily(daily);
 
+      await getAiInterpretation(data);
+
     } catch (err) {
       if (err instanceof Error) {
         setError(`Error fetching data: ${err.message}`);
@@ -82,18 +127,18 @@ const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getAiInterpretation]);
   
   useEffect(() => {
     fetchWeatherData(latitude, longitude);
-  }, [fetchWeatherData]);
+  }, []); // Remove fetchWeatherData from dependency array to prevent re-fetch on every render
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchWeatherData(latitude, longitude);
   };
   
-  const currentHourData = weatherData && processedHourly.length > 0 ? weatherData.hourly.time.findIndex(t => t === processedHourly[0].time) : 0;
+  const currentHourDataIndex = weatherData ? weatherData.hourly.time.findIndex(t => new Date(t) >= new Date()) ?? 0 : 0;
   
   return (
     <div className="bg-gray-800 min-h-screen text-white p-4 sm:p-6 lg:p-8 font-sans">
@@ -133,14 +178,14 @@ const App: React.FC = () => {
                 <h2 className="text-2xl font-semibold mb-4 text-gray-300">Current Weather in {weatherData.timezone.split('/')[1]?.replace('_', ' ')}</h2>
                 <div className="flex flex-col sm:flex-row justify-between items-center">
                     <div className="text-center sm:text-left">
-                        <p className="text-6xl font-extrabold">{Math.round(weatherData.hourly.temperature_2m[currentHourData])}{weatherData.hourly_units.temperature_2m}</p>
-                        <p className="text-xl text-gray-400">{WMO_CODES[weatherData.hourly.weather_code[currentHourData]]?.description}</p>
+                        <p className="text-6xl font-extrabold">{Math.round(weatherData.hourly.temperature_2m[currentHourDataIndex])}{weatherData.hourly_units.temperature_2m}</p>
+                        <p className="text-xl text-gray-400">{WMO_CODES[weatherData.hourly.weather_code[currentHourDataIndex]]?.description}</p>
                     </div>
-                    <div className="text-7xl my-4 sm:my-0">{WMO_CODES[weatherData.hourly.weather_code[currentHourData]]?.icon}</div>
+                    <div className="text-7xl my-4 sm:my-0">{WMO_CODES[weatherData.hourly.weather_code[currentHourDataIndex]]?.icon}</div>
                     <div className="text-sm text-gray-400 space-y-2 text-center sm:text-right">
-                        <p>Feels like: {Math.round(weatherData.hourly.apparent_temperature[currentHourData])}°</p>
-                        <p>Humidity: {weatherData.hourly.relative_humidity_2m[currentHourData]}%</p>
-                        <p>Wind: {weatherData.hourly.wind_speed_10m[currentHourData]} km/h</p>
+                        <p>Feels like: {Math.round(weatherData.hourly.apparent_temperature[currentHourDataIndex])}°</p>
+                        <p>Humidity: {weatherData.hourly.relative_humidity_2m[currentHourDataIndex]}%</p>
+                        <p>Wind: {weatherData.hourly.wind_speed_10m[currentHourDataIndex]} km/h</p>
                     </div>
                 </div>
               </div>
@@ -175,6 +220,26 @@ const App: React.FC = () => {
                   ))}
                 </div>
               </div>
+                
+              {/* AI Interpretation */}
+               <div className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
+                <h2 className="text-2xl font-semibold mb-4 text-cyan-300 flex items-center gap-3" dir="rtl">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M12 21v-1m0-16a7 7 0 110 14 7 7 0 010-14z" />
+                    </svg>
+                    تحلیل هوش مصنوعی
+                </h2>
+                {isAiLoading ? (
+                  <div className="flex justify-center items-center py-4">
+                     <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : (
+                  <p className="text-gray-300 leading-relaxed text-right" dir="rtl">
+                    {aiInterpretation}
+                  </p>
+                )}
+              </div>
+
             </div>
           )}
         </main>
