@@ -54,7 +54,7 @@ const App: React.FC = () => {
     try {
         // The application uses the API_KEY environment variable.
         // Ensure your key (e.g., the one you named DATALEARN) is configured in the API_KEY environment variable.
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: process.env.DATALEARN });
 
         const prompt = `
         شما یک دستیار هواشناسی خوش‌برخورد و خلاق هستید. بر اساس داده‌های آب و هوای زیر برای شهر "${data.timezone.split('/')[1]?.replace('_', ' ')}"، یک تحلیل جذاب به زبان فارسی ارائه دهید.
