@@ -4,9 +4,6 @@ import type { WeatherData, ProcessedHourly, ProcessedDaily } from './types';
 import Loader from './components/Loader';
 import ErrorMessage from './components/ErrorMessage';
 
-// Initialize the Gemini AI model
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const WMO_CODES: { [key: number]: { description: string; icon: string; } } = {
   0: { description: 'Clear sky', icon: '☀️' },
   1: { description: 'Mainly clear', icon: '🌤️' },
@@ -52,7 +49,15 @@ const App: React.FC = () => {
   const getAiInterpretation = useCallback(async (data: WeatherData) => {
     setIsAiLoading(true);
     setAiInterpretation('');
+
+    if (!process.env.API_KEY) {
+        setAiInterpretation("خطا: کلید API برای Gemini تنظیم نشده است. لطفاً متغیر محیطی را در Vercel تنظیم کنید.");
+        setIsAiLoading(false);
+        return;
+    }
+
     try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const now = new Date();
         const currentHourIndex = data.hourly.time.findIndex(t => new Date(t) >= now) ?? 0;
 
@@ -130,8 +135,8 @@ const App: React.FC = () => {
   }, [getAiInterpretation]);
   
   useEffect(() => {
-    fetchWeatherData(latitude, longitude);
-  }, []); // Remove fetchWeatherData from dependency array to prevent re-fetch on every render
+    fetchWeatherData('52.52', '13.41');
+  }, [fetchWeatherData]); 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
