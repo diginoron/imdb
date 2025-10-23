@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import type { WeatherData, ProcessedHourly, ProcessedDaily } from './types';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -79,7 +80,7 @@ const App: React.FC = () => {
     try {
       const apiKey = process.env.API_KEY;
       if (!apiKey) {
-        setAiInterpretation("تحلیل هوش مصنوعی در دسترس نیست. لطفا از تنظیم شدن کلید API اطمینان حاصل کنید.");
+        setAiInterpretation("کلید API هوش مصنوعی یافت نشد. برای فعال‌سازی این قابلیت، لطفاً متغیر محیطی `API_KEY` را در تنظیمات پلتفرم استقرار خود (مانند Vercel) اضافه کنید.");
         return;
       }
       const ai = new GoogleGenAI({ apiKey });
@@ -132,7 +133,7 @@ const App: React.FC = () => {
           throw new Error("پاسخ هوش مصنوعی فاقد فیلدهای مورد نیاز است.");
       }
   
-      const interpretation = `${aiJsonResponse.summary}\n\n**پیشنهاد خلاقانه:**\n${aiJsonResponse.suggestion}`;
+      const interpretation = `${aiJsonResponse.summary}\n\nپیشنهاد خلاقانه:\n${aiJsonResponse.suggestion}`;
       setAiInterpretation(interpretation);
 
     } catch (aiError) {
