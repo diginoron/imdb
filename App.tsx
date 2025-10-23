@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import type { WeatherData, ProcessedHourly, ProcessedDaily } from './types';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -20,8 +19,9 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [aiInterpretation, setAiInterpretation] = useState<string>('');
+  const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
 
-  const fetchWeatherAndInterpretation = useCallback(async (lat: string, lon: string) => {
+  const fetchWeather = useCallback(async (lat: string, lon: string): Promise<WeatherData | null> => {
     setLoading(true);
     setError(null);
     setWeatherData(null);
@@ -30,7 +30,6 @@ const App: React.FC = () => {
     setProcessedHourly([]);
 
     try {
-      // 1. Fetch weather data from Open-Meteo
       const weatherResponse = await fetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`
       );
@@ -41,7 +40,6 @@ const App: React.FC = () => {
       }
       const weatherDataResult: WeatherData = await weatherResponse.json();
       
-      // 2. Process weather data for display and update state
       const now = new Date();
       const currentHourIndex = weatherDataResult.hourly.time.findIndex((t) => new Date(t) >= now) ?? 0;
       const hourly: ProcessedHourly[] = weatherDataResult.hourly.time
@@ -61,71 +59,7 @@ const App: React.FC = () => {
       setWeatherData(weatherDataResult);
       setProcessedHourly(hourly);
       setProcessedDaily(daily);
-
-      // 3. Get AI interpretation from Gemini (as an enhancement)
-      try {
-        const apiKey = process.env.API_KEY;
-        if (!apiKey) {
-          throw new Error("کلید API یافت نشد.");
-        }
-        const ai = new GoogleGenAI({ apiKey });
-        const prompt = `
-            بر اساس داده‌های آب و هوای زیر برای شهر "${weatherDataResult.timezone.split("/")[1]?.replace("_", " ")}"، یک تحلیل جذاب به زبان فارسی ارائه دهید.
-            داده‌های آب و هوا:
-            - دمای فعلی: ${Math.round(weatherDataResult.current.temperature_2m)}°C
-            - وضعیت فعلی: ${WMO_CODES[weatherDataResult.current.weather_code]?.description || 'نامشخص'}
-            - دمای احساسی: ${Math.round(weatherDataResult.current.apparent_temperature)}°C
-            - رطوبت: ${weatherDataResult.current.relative_humidity_2m}%
-            - سرعت باد: ${weatherDataResult.current.wind_speed_10m} km/h
-            - پیش‌بینی امروز: حداکثر ${Math.round(weatherDataResult.daily.temperature_2m_max[0])}°C، حداقل ${Math.round(weatherDataResult.daily.temperature_2m_min[0])}°C
-            `;
-        const geminiResponse = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                summary: {
-                  type: Type.STRING,
-                  description: "یک پاراگراف خوانا و مفید درباره وضعیت فعلی و پیش‌بینی امروز به زبان فارسی.",
-                },
-                suggestion: {
-                  type: Type.STRING,
-                  description: "یک پیشنهاد سرگرم‌کننده یا یک نکته جالب مرتبط با این آب و هوا به زبان فارسی.",
-                },
-              },
-              required: ["summary", "suggestion"],
-            },
-          },
-        });
-        
-        const responseText = geminiResponse.text.trim();
-        let aiJsonResponse;
-        try {
-            aiJsonResponse = JSON.parse(responseText);
-        } catch (parseError) {
-            const match = responseText.match(/```json\n([\s\S]*?)\n```/);
-            if (match && match[1]) {
-              aiJsonResponse = JSON.parse(match[1]);
-            } else {
-               throw new Error("خطا در پردازش پاسخ هوش مصنوعی.");
-            }
-        }
-    
-        if (!aiJsonResponse.summary || !aiJsonResponse.suggestion) {
-            throw new Error("پاسخ هوش مصنوعی فاقد فیلدهای مورد نیاز است.");
-        }
-    
-        const interpretation = `${aiJsonResponse.summary}\n\n**پیشنهاد خلاقانه:**\n${aiJsonResponse.suggestion}`;
-        setAiInterpretation(interpretation);
-
-      } catch (aiError) {
-        console.error("AI Interpretation Error:", aiError);
-        setAiInterpretation("متاسفانه تحلیل هوش مصنوعی در حال حاضر در دسترس نیست.");
-      }
-
+      return weatherDataResult;
     } catch (err) {
       console.error("Weather Fetch Error:", err);
       if (err instanceof Error) {
@@ -133,23 +67,101 @@ const App: React.FC = () => {
       } else {
         setError('یک خطای ناشناخته در دریافت اطلاعات آب و هوا رخ داده است.');
       }
+      return null;
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const fetchAiInterpretation = useCallback(async (weatherDataResult: WeatherData) => {
+    setIsAiLoading(true);
+    setAiInterpretation("");
+    try {
+      const apiKey = process.env.API_KEY;
+      if (!apiKey) {
+        setAiInterpretation("تحلیل هوش مصنوعی در دسترس نیست. لطفا از تنظیم شدن کلید API اطمینان حاصل کنید.");
+        return;
+      }
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `
+          بر اساس داده‌های آب و هوای زیر برای شهر "${weatherDataResult.timezone.split("/")[1]?.replace("_", " ")}"، یک تحلیل جذاب به زبان فارسی ارائه دهید.
+          داده‌های آب و هوا:
+          - دمای فعلی: ${Math.round(weatherDataResult.current.temperature_2m)}°C
+          - وضعیت فعلی: ${WMO_CODES[weatherDataResult.current.weather_code]?.description || 'نامشخص'}
+          - دمای احساسی: ${Math.round(weatherDataResult.current.apparent_temperature)}°C
+          - رطوبت: ${weatherDataResult.current.relative_humidity_2m}%
+          - سرعت باد: ${weatherDataResult.current.wind_speed_10m} km/h
+          - پیش‌بینی امروز: حداکثر ${Math.round(weatherDataResult.daily.temperature_2m_max[0])}°C، حداقل ${Math.round(weatherDataResult.daily.temperature_2m_min[0])}°C
+          `;
+      const geminiResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              summary: {
+                type: Type.STRING,
+                description: "یک پاراگراف خوانا و مفید درباره وضعیت فعلی و پیش‌بینی امروز به زبان فارسی.",
+              },
+              suggestion: {
+                type: Type.STRING,
+                description: "یک پیشنهاد سرگرم‌کننده یا یک نکته جالب مرتبط با این آب و هوا به زبان فارسی.",
+              },
+            },
+            required: ["summary", "suggestion"],
+          },
+        },
+      });
+      
+      const responseText = geminiResponse.text.trim();
+      let aiJsonResponse;
+      try {
+          aiJsonResponse = JSON.parse(responseText);
+      } catch (parseError) {
+          const match = responseText.match(/```json\n([\s\S]*?)\n```/);
+          if (match && match[1]) {
+            aiJsonResponse = JSON.parse(match[1]);
+          } else {
+             throw new Error("خطا در پردازش پاسخ هوش مصنوعی.");
+          }
+      }
+  
+      if (!aiJsonResponse.summary || !aiJsonResponse.suggestion) {
+          throw new Error("پاسخ هوش مصنوعی فاقد فیلدهای مورد نیاز است.");
+      }
+  
+      const interpretation = `${aiJsonResponse.summary}\n\n**پیشنهاد خلاقانه:**\n${aiJsonResponse.suggestion}`;
+      setAiInterpretation(interpretation);
+
+    } catch (aiError) {
+      console.error("AI Interpretation Error:", aiError);
+      setAiInterpretation("متاسفانه تحلیل هوش مصنوعی در حال حاضر در دسترس نیست. ممکن است به دلیل ترافیک بالا یا خطای شبکه باشد.");
+    } finally {
+      setIsAiLoading(false);
+    }
+  }, []);
+
+  const handleFetchData = useCallback(async (lat: string, lon: string) => {
+    const weatherDataResult = await fetchWeather(lat, lon);
+    if (weatherDataResult) {
+      await fetchAiInterpretation(weatherDataResult);
+    }
+  }, [fetchWeather, fetchAiInterpretation]);
 
   useEffect(() => {
     const defaultLat = '52.52';
     const defaultLon = '13.41';
     setLatitude(defaultLat);
     setLongitude(defaultLon);
-    fetchWeatherAndInterpretation(defaultLat, defaultLon);
-  }, [fetchWeatherAndInterpretation]);
+    handleFetchData(defaultLat, defaultLon);
+  }, [handleFetchData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (latitude && longitude) {
-        fetchWeatherAndInterpretation(latitude, longitude);
+        handleFetchData(latitude, longitude);
     } else {
         setError("لطفا عرض و طول جغرافیایی را به درستی وارد کنید.");
     }
@@ -179,7 +191,7 @@ const App: React.FC = () => {
               <CurrentWeather weatherData={weatherData} />
               <HourlyForecast processedHourly={processedHourly} />
               <DailyForecast processedDaily={processedDaily} />
-              <AiInterpretation aiInterpretation={aiInterpretation} />
+              <AiInterpretation aiInterpretation={aiInterpretation} isLoading={isAiLoading} />
             </div>
           )}
         </main>
