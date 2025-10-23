@@ -1,11 +1,11 @@
+
 import React from 'react';
 
 interface AiInterpretationProps {
   aiInterpretation: string;
-  isAiLoading: boolean;
 }
 
-const AiInterpretation: React.FC<AiInterpretationProps> = ({ aiInterpretation, isAiLoading }) => {
+const AiInterpretation: React.FC<AiInterpretationProps> = ({ aiInterpretation }) => {
   return (
     <section aria-labelledby="ai-interpretation-heading" className="bg-gray-700/50 p-6 rounded-xl shadow-lg">
       <h2 id="ai-interpretation-heading" className="text-2xl font-semibold mb-4 text-cyan-300 flex items-center gap-3" dir="rtl">
@@ -14,16 +14,9 @@ const AiInterpretation: React.FC<AiInterpretationProps> = ({ aiInterpretation, i
         </svg>
         تحلیل هوش مصنوعی
       </h2>
-      {isAiLoading ? (
-        <div className="flex justify-center items-center py-4" aria-live="polite" aria-busy="true">
-          <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
-          <span className="sr-only">Loading AI interpretation</span>
-        </div>
-      ) : (
-        <p className="text-gray-300 leading-relaxed text-right whitespace-pre-line" dir="rtl">
-          {aiInterpretation}
-        </p>
-      )}
+      <p className="text-gray-300 leading-relaxed text-right whitespace-pre-line" dir="rtl">
+        {aiInterpretation}
+      </p>
     </section>
   );
 };

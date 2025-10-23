@@ -1,3 +1,4 @@
+
 export interface WeatherData {
   latitude: number;
   longitude: number;
@@ -63,4 +64,11 @@ export interface ProcessedDaily {
     weather_code: number;
     temperature_2m_max: number;
     temperature_2m_min: number;
+}
+
+export interface CombinedWeatherData {
+    weatherData: WeatherData;
+    processedHourly: ProcessedHourly[];
+    processedDaily: ProcessedDaily[];
+    aiInterpretation: string;
 }

@@ -1,9 +1,2 @@
-// This component is no longer used in the new Weather App.
-// It can be safely deleted.
-import React from 'react';
-
-const MovieCard: React.FC = () => {
-  return null;
-};
-
-export default MovieCard;
+// This file is obsolete and can be safely deleted.
+// The application logic has been refactored and this component is no longer used.
